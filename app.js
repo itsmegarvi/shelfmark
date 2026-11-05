@@ -23,16 +23,17 @@ function loadConfig() {
 }
 const firebaseConfig = loadConfig();
 
-const VERSION = '1.3.0';
+const VERSION = '1.4.0';
 const LS_KEY = 'shelfmark:v1';
 const FIREBASE_V = '10.12.2';
-const DEFAULT_SOURCES = ['AsuraNovels', 'WebNovel', 'LightWebNovelReads', 'NovelCodex', 'AO3', 'Royal Road', 'ScribbleHub', 'Other'];
+const DEFAULT_SOURCES = ['AsuraNovels', 'WebNovel', 'LightWebNovelReads', 'NovelCodex', 'WuxiaWorld', 'AO3', 'Royal Road', 'ScribbleHub', 'Other'];
 const SOURCE_HINTS = [
   [/asura/i, 'AsuraNovels'],
   [/webnovel\.com/i, 'WebNovel'],
   [/lightwebnovel|lightnovel|novelreads/i, 'LightWebNovelReads'],
   [/archiveofourown|(^|\.)ao3\./i, 'AO3'],
   [/novelcodex/i, 'NovelCodex'],
+  [/wuxiaworld/i, 'WuxiaWorld'],
   [/royalroad/i, 'Royal Road'],
   [/scribblehub/i, 'ScribbleHub'],
 ];
@@ -82,7 +83,7 @@ function load() {
     const s = JSON.parse(localStorage.getItem(LS_KEY));
     if (s && s.novels && s.logs) {
       s.settings = { defaultWpc: 2000, sources: DEFAULT_SOURCES, updatedAt: 0, fetcherUrl: '', sampleSize: 20, ...(s.settings || {}) };
-      if (!s.settings.sources.includes('NovelCodex')) s.settings.sources = [...s.settings.sources.filter((x) => x !== 'Other'), 'NovelCodex', 'Other'];
+      for (const src of ['NovelCodex', 'WuxiaWorld']) if (!s.settings.sources.includes(src)) s.settings.sources = [...s.settings.sources.filter((x) => x !== 'Other'), src, 'Other'];
       return s;
     }
   } catch {}
@@ -152,11 +153,13 @@ function deleteNovel(id) {
 }
 function detectSource(url) {
   if (!url) return null;
-  let host = url;
-  try { host = new URL(url).hostname; } catch {}
+  let host;
+  try { host = new URL(url).hostname.toLowerCase(); } catch { return null; }
   const hit = SOURCE_HINTS.find(([re]) => re.test(host));
-  if (!hit) return null;
-  return state.settings.sources.includes(hit[1]) ? hit[1] : null;
+  if (hit) return hit[1];
+  // Unknown site → name it after the domain, e.g. www.novelfire.net → "Novelfire"
+  const core = host.replace(/^(www|m|read)\./, '').split('.').slice(0, -1).join('.') || host;
+  return core.charAt(0).toUpperCase() + core.slice(1);
 }
 
 /* ---------------- UI: navigation ---------------- */
@@ -318,7 +321,7 @@ function updateNovelHints() {
 }
 nf_.url.addEventListener('input', () => {
   const s = detectSource(nf_.url.value);
-  if (s) nf_.source.value = s;
+  if (s) { fillSourceOptions(s); nf_.source.value = s; }
   updateFetchBtn();
 });
 nf_.wpc.addEventListener('input', () => { fetched.wpcNote = null; });
@@ -365,6 +368,24 @@ $('#fetchInfo').addEventListener('click', async () => {
       if (m.totalWords) nf_.totalWords.value = m.totalWords;
       fetched.wpcNote = `exact, ${m.publishedChapters} ch`;
       st.textContent = `Done · ${num(m.totalWords)} words over ${m.publishedChapters} chapters.`;
+    } else if (m.firstChapter) {
+      const want = int(state.settings.sampleSize) || 20;
+      const counts = [];
+      let next = m.firstChapter;
+      while (next && counts.length < want) {
+        st.textContent = `Counting words · chapter ${counts.length + 1}–${Math.min(counts.length + 5, want)} of ${want}…`;
+        const res = await fetchJson('/walk?n=' + Math.min(5, want - counts.length) + '&u=' + encodeURIComponent(next));
+        counts.push(...res.counts);
+        next = res.next;
+        if (!res.counts.length) break;
+      }
+      const good = counts.filter((c) => c > 100);
+      if (good.length) {
+        const avg = Math.round(good.reduce((x, y) => x + y, 0) / good.length);
+        nf_.wpc.value = avg;
+        fetched.wpcNote = `avg of ${good.length} ch`;
+        st.textContent = `Done · ~${num(avg)} words/chapter (average of first ${good.length} chapters).`;
+      } else st.textContent = 'Got details, but couldn\'t count words on this site — set words/chapter yourself.';
     } else if (m.chapterUrls?.length) {
       const urls = m.chapterUrls.slice(0, int(state.settings.sampleSize) || 20);
       const counts = [];
@@ -417,6 +438,10 @@ nf_.addEventListener('submit', (e) => {
     pubStatus: fetched.pubStatus || null,
     wpcNote: fetched.wpcNote || null,
   };
+  if (data.source && !state.settings.sources.includes(data.source)) {
+    const list = state.settings.sources.filter((x) => x !== 'Other');
+    putSettings({ sources: [...list, data.source, 'Other'] });
+  }
   const targetRead = Math.max(0, int(nf_.chaptersRead.value) || 0);
   const today = dayStr();
   if (prev) {

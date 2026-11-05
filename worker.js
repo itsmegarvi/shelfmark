@@ -5,12 +5,13 @@
 // Endpoints
 //   GET /meta?url=<novel page>            → { title, author, cover, status, genres, totalChapters, chapterUrls, avgWords?, totalWords? }
 //   GET /words?u=<chapter>&u=<chapter>…   → { counts: [n, …] }  (max 5 per call)
+//   GET /walk?u=<chapter>&n=5              → { counts: [n, …], next }  follows "Next chapter" links (sites with no chapter list)
 
-// Only these sites can be fetched (keeps the Worker from being an open proxy).
-const ALLOWED_HOSTS = [
-  'asurascans.com', 'asuracomic.net', 'novelcodex.com', 'archiveofourown.org',
-  'webnovel.com', 'royalroad.com', 'scribblehub.com',
-];
+// Any public https site can be read. The Worker only ever returns metadata and word counts —
+// never page text — so it can't be used as a general proxy. Sites listed here get tuned parsers;
+// everything else uses the generic reader (og: tags + chapter links + "Next chapter" walking).
+// Optional: set BLOCKED_HOSTS to keep specific sites out.
+const BLOCKED_HOSTS = [];
 // Pages allowed to call this Worker. Add your own domain if you host Shelfmark elsewhere.
 const ALLOWED_ORIGINS = ['https://itsmegarvi.github.io', 'http://localhost:8080', 'http://localhost:8765'];
 
@@ -47,7 +48,20 @@ export default {
         }));
         return json({ counts }, 200, 604800);
       }
-      return json({ ok: true, service: 'shelfmark-fetcher', endpoints: ['/meta?url=', '/words?u='] });
+      if (url.pathname === '/walk') {
+        let cur = checkUrl(url.searchParams.get('u'));
+        const n = Math.min(MAX_WORD_URLS, parseInt(url.searchParams.get('n') || '5', 10) || 5);
+        const counts = [];
+        let next = null;
+        for (let i = 0; i < n && cur; i++) {
+          const html = await getPage(cur, ctx);
+          counts.push(countChapterWords(html));
+          next = findNextChapter(cur, html);
+          cur = next ? checkUrl(next) : null;
+        }
+        return json({ counts, next }, 200, 604800);
+      }
+      return json({ ok: true, service: 'shelfmark-fetcher', version: 2, endpoints: ['/meta?url=', '/words?u=', '/walk?u=&n='] });
     } catch (e) {
       return json({ error: String(e.message || e) }, e.status || 500);
     }
@@ -57,9 +71,10 @@ export default {
 function checkUrl(raw) {
   let u;
   try { u = new URL(raw); } catch { throw Object.assign(new Error('bad url'), { status: 400 }); }
-  const host = u.hostname.replace(/^www\./, '');
-  if (u.protocol !== 'https:' || !ALLOWED_HOSTS.some((h) => host === h || host.endsWith('.' + h))) {
-    throw Object.assign(new Error('site not supported: ' + host), { status: 400 });
+  const host = u.hostname.replace(/^www\./, '').toLowerCase();
+  const privateHost = /^(localhost|.*\.local|.*\.internal|\d+\.\d+\.\d+\.\d+|\[.*\])$/i.test(host);
+  if (u.protocol !== 'https:' || privateHost || BLOCKED_HOSTS.some((h) => host === h || host.endsWith('.' + h))) {
+    throw Object.assign(new Error(`can't read ${host} — only public https sites are supported`), { status: 400 });
   }
   if (host.endsWith('archiveofourown.org') && !u.searchParams.has('view_adult')) u.searchParams.set('view_adult', 'true');
   return u;
@@ -85,9 +100,9 @@ const decode = (s) => String(s || '')
   .replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&nbsp;/g, ' ').replace(/&amp;/g, '&');
 const strip = (s) => decode(String(s || '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 const meta = (html, key) => {
-  const re = new RegExp(`<meta[^>]+(?:property|name)=["']${key}["'][^>]*>`, 'i');
+  const re = new RegExp(`<meta[^>]+(?:property|name)=["']${key}["'](?:[^>"']|"[^"]*"|'[^']*')*>`, 'i');
   const tag = html.match(re)?.[0];
-  return tag ? decode(tag.match(/content=["']([^"']*)["']/i)?.[1] || '') : '';
+  return tag ? decode(tag.match(/content=(["'])([\s\S]*?)\1/i)?.[2] || '') : '';
 };
 const uniq = (a) => [...new Set(a.filter(Boolean))];
 const toInt = (s) => { const n = parseInt(String(s || '').replace(/[^\d]/g, ''), 10); return Number.isFinite(n) ? n : null; };
@@ -107,7 +122,8 @@ function parseMeta(u, html) {
   if (host.includes('asura')) return { ...base, ...parseAsura(u, html, base) };
   if (host.endsWith('novelcodex.com')) return { ...base, ...parseNovelCodex(html, base) };
   if (host.endsWith('archiveofourown.org')) return { ...base, ...parseAO3(html) };
-  return { ...base, chapterUrls: genericChapterUrls(u, html) };
+  if (host.endsWith('wuxiaworld.com')) return { ...base, ...parseWuxiaWorld(u, html, base) };
+  return { ...base, ...parseGeneric(u, html, base) };
 }
 
 function parseAsura(u, html, base) {
@@ -157,6 +173,60 @@ function parseAO3(html) {
     totalWords: words,
     avgWords: words && published ? Math.round(words / published) : null,
     cover: null,
+  };
+}
+
+function parseWuxiaWorld(u, html, base) {
+  const text = textOf(html);
+  const slug = u.pathname.match(/\/novel\/([^/]+)/)?.[1] || '';
+  const desc = base.description || '';
+  const genres = (desc.match(/ is an? (.+?) (?:Chinese|Korean|Japanese|English|Original)?\s*web novel/i)?.[1] || '')
+    .split(/,\s*/).map((g) => g.trim()).filter((g) => g && g.length < 25);
+  const links = [...html.matchAll(new RegExp(`href=["']((?:https://www\\.wuxiaworld\\.com)?/novel/${slug}/[^"'#?]*chapter[^"'#?]*)["']`, 'gi'))].map((m) => new URL(decode(m[1]), u).toString());
+  return {
+    title: base.title.replace(/\s*\|\s*Wuxiaworld\s*$/i, ''),
+    author: text.match(/\bAuthor:?\s+(.{2,60}?)\s+(?:Translator|Editor|Status|Genres?|Language)\b/i)?.[1]?.trim() || base.author,
+    genres,
+    status: text.match(/\b(Ongoing|Completed|Hiatus)\b/)?.[1]?.toLowerCase() || null,
+    totalChapters: toInt(text.match(/(\d[\d,]*)\s*Chapters\b/i)?.[1]),
+    chapterUrls: [],
+    firstChapter: links[0] || null,
+  };
+}
+
+// Find the "Next chapter" link on a chapter page.
+function findNextChapter(u, html) {
+  const anchors = [...html.matchAll(/<a\b[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi)];
+  for (const [, href, inner] of anchors) {
+    const label = strip(inner);
+    if (/^next(\s+chapter)?\b/i.test(label) || /\brel=["']next["']/i.test(inner)) {
+      try {
+        const n = new URL(decode(href), u);
+        if (n.hostname === u.hostname && n.toString() !== u.toString()) return n.toString();
+      } catch {}
+    }
+  }
+  const rel = html.match(/<(?:a|link)\b[^>]*rel=["']next["'][^>]*href=["']([^"']+)["']/i)?.[1];
+  if (rel) { try { return new URL(decode(rel), u).toString(); } catch {} }
+  return null;
+}
+
+function parseGeneric(u, html, base) {
+  const text = textOf(html);
+  const chapterUrls = genericChapterUrls(u, html);
+  let firstChapter = null;
+  if (chapterUrls.length < 3) {
+    const start = [...html.matchAll(/<a\b[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi)]
+      .find(([, , inner]) => /\b(start reading|read (first|now)|first chapter|chapter\s*0*1\b)/i.test(strip(inner)));
+    try { firstChapter = start ? new URL(decode(start[1]), u).toString() : (chapterUrls[0] || null); } catch {}
+  }
+  return {
+    title: base.title.split(/\s+[|\-–—]\s+/)[0] || base.title,
+    author: base.author || text.match(/\bAuthor(?:\(s\))?:?\s+(.{2,60}?)\s+(?:Translator|Editor|Status|Genres?|Artist|Language|Publisher|Chapters?)\b/i)?.[1]?.trim() || '',
+    status: text.match(/\bStatus:?\s*(Ongoing|Completed|Hiatus|Dropped)\b/i)?.[1]?.toLowerCase() || text.match(/\b(Ongoing|Completed)\b/)?.[1]?.toLowerCase() || null,
+    totalChapters: toInt(text.match(/(\d[\d,]*)\s*Chapters\b/i)?.[1]) || null,
+    chapterUrls: chapterUrls.length >= 3 ? chapterUrls : [],
+    firstChapter,
   };
 }
 

@@ -58,11 +58,11 @@ A small Cloudflare Worker (`worker.js` in this repo) reads a novel's page and re
 
 Chapter text is never saved.
 
-Supported sites:
+It works with **any novel site**: paste a link and tap **⤓ Fetch info**.
 
-- **Asura**: everything, including the word average
-- **NovelCodex**: cover and details only. It's a tracker site with no chapter text to count.
-- **AO3**: exact word count
+- **Tuned for:** Asura (everything, including the word average), WuxiaWorld (follows "Next chapter" links to sample), AO3 (exact word count) and NovelCodex (cover and details only; it's a tracker site with no chapter text).
+- **Any other site:** the Worker reads the page's preview tags for the title and cover, then looks for the chapter list or a "Start reading" link and follows "Next chapter" to count words. Most sites work. If a site hides its chapters behind JavaScript or a bot check, you'll get the details but not the word average.
+- **New sites** are added to your Sources list automatically, named after the domain.
 
 ### Set it up from your phone (about 5 min)
 1. Go to dash.cloudflare.com and sign up for free.
@@ -74,5 +74,6 @@ Supported sites:
 7. Add a novel: paste its link, tap **⤓ Fetch info**, then **Save**.
 
 If you host Shelfmark somewhere other than `itsmegarvi.github.io`, add that address to `ALLOWED_ORIGINS` at the top of `worker.js`.
-To support another site, add it to `ALLOWED_HOSTS`. Generic chapter links (`.../chapter-12`) work on many sites.
+The Worker only ever returns details and word counts, never chapter text, so leaving it open to any site is safe. To keep a site out, add it to `BLOCKED_HOSTS`.
+**Updating the Worker:** open it in Cloudflare → **Edit code**, select all, paste the new `worker.js`, then **Deploy**.
 The free plan allows 100,000 requests a day. Sampling 20 chapters uses 5 requests.
