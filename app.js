@@ -23,7 +23,7 @@ function loadConfig() {
 }
 const firebaseConfig = loadConfig();
 
-const VERSION = '1.2.1';
+const VERSION = '1.3.0';
 const LS_KEY = 'shelfmark:v1';
 const FIREBASE_V = '10.12.2';
 const DEFAULT_SOURCES = ['AsuraNovels', 'WebNovel', 'LightWebNovelReads', 'NovelCodex', 'AO3', 'Royal Road', 'ScribbleHub', 'Other'];
@@ -41,6 +41,21 @@ const STATUSES = [
   ['onhold', 'On hold'], ['dropped', 'Dropped'],
 ];
 const STATUS_LABEL = Object.fromEntries(STATUSES);
+// Theme colours: [light-mode shade, dark-mode shade]
+const ACCENTS = {
+  orange: ['#c2410c', '#fb923c'], rose: ['#be123c', '#fb7185'], violet: ['#6d28d9', '#a78bfa'],
+  blue: ['#1d4ed8', '#60a5fa'], teal: ['#0f766e', '#2dd4bf'], green: ['#15803d', '#4ade80'], gold: ['#a16207', '#facc15'],
+};
+const darkMQ = matchMedia('(prefers-color-scheme: dark)');
+function applyAccent() {
+  const [light, dark] = ACCENTS[state.settings.accent] || ACCENTS.orange;
+  const isDark = darkMQ.matches;
+  const root = document.documentElement.style;
+  root.setProperty('--accent', isDark ? dark : light);
+  root.setProperty('--accent-ink', isDark ? '#14161c' : '#ffffff');
+  root.setProperty('--bar', isDark ? dark : light);
+}
+darkMQ.addEventListener?.('change', applyAccent);
 const KINDS = ['novels', 'logs'];
 
 /* ---------------- utils ---------------- */
@@ -225,7 +240,7 @@ function novelCard(n) {
       <h3 class="novel-title">${esc(n.title)}</h3>
       <div class="novel-meta">
         ${n.source ? `<span class="badge">${esc(n.source)}</span>` : ''}
-        ${lib.status === 'all' ? `<span class="badge status">${STATUS_LABEL[n.status] || ''}</span>` : ''}
+        ${lib.status === 'all' ? `<span class="badge status ${n.status}">${STATUS_LABEL[n.status] || ''}</span>` : ''}
         ${n.author ? `<span>${esc(n.author)}</span>` : ''}
         ${stars ? `<span>${stars}</span>` : ''}
         ${n.url ? `<a class="link-out" href="${esc(n.url)}" target="_blank" rel="noopener" data-stop>Open ↗</a>` : ''}
@@ -661,6 +676,9 @@ $('#historyList').addEventListener('click', (e) => {
 
 /* ---------------- Settings ---------------- */
 function renderSettings() {
+  const cur = state.settings.accent || 'orange';
+  $('#swatches').innerHTML = Object.entries(ACCENTS).map(([k, [l, d]]) =>
+    `<button class="swatch ${k === cur ? 'active' : ''}" data-accent="${k}" style="--sw:${darkMQ.matches ? d : l}" aria-label="${k}" title="${k}"></button>`).join('');
   $('#defaultWpc').value = state.settings.defaultWpc;
   $('#sourcesInput').value = state.settings.sources.join(', ');
   $('#fetcherUrl').value = state.settings.fetcherUrl || '';
@@ -714,6 +732,10 @@ $('#saveSettings').addEventListener('click', () => {
   const sources = [...new Set($('#sourcesInput').value.split(',').map((s) => s.trim()).filter(Boolean))];
   putSettings({ defaultWpc: int($('#defaultWpc').value) || 2000, sources: sources.length ? sources : DEFAULT_SOURCES });
   toast('Settings saved');
+});
+$('#swatches').addEventListener('click', (e) => {
+  const b = e.target.closest('[data-accent]');
+  if (b) putSettings({ accent: b.dataset.accent });
 });
 $('#saveFetcher').addEventListener('click', () => {
   let u = $('#fetcherUrl').value.trim().replace(/\/+$/, '');
@@ -874,6 +896,7 @@ $('#settingsSignOut').addEventListener('click', signOutNow);
 
 /* ---------------- render + boot ---------------- */
 function render() {
+  applyAccent();
   if (currentView === 'library') renderLibrary();
   if (currentView === 'recap') renderRecap();
   if (currentView === 'history') renderHistory();
