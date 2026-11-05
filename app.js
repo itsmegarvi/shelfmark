@@ -23,7 +23,7 @@ function loadConfig() {
 }
 const firebaseConfig = loadConfig();
 
-const VERSION = '1.2.0';
+const VERSION = '1.2.1';
 const LS_KEY = 'shelfmark:v1';
 const FIREBASE_V = '10.12.2';
 const DEFAULT_SOURCES = ['AsuraNovels', 'WebNovel', 'LightWebNovelReads', 'NovelCodex', 'AO3', 'Royal Road', 'ScribbleHub', 'Other'];
@@ -313,7 +313,7 @@ let fetched = { pubStatus: null, wpcNote: null };
 let fetching = false;
 const fetcher = () => (state.settings.fetcherUrl || '').replace(/\/+$/, '');
 function updateFetchBtn() {
-  $('#fetchInfo').classList.toggle('hidden', !fetcher() || !/^https?:\/\//.test(nf_.url.value.trim()));
+  $('#fetchInfo').classList.toggle('hidden', !/^https?:\/\//i.test(nf_.url.value.trim()));
 }
 function showCover() {
   const img = $('#coverPreview');
@@ -330,6 +330,7 @@ $('#fetchInfo').addEventListener('click', async () => {
   if (fetching) return;
   const url = nf_.url.value.trim();
   const st = $('#fetchStatus');
+  if (!fetcher()) { st.textContent = 'Add your Worker URL first: Settings → Auto-fetch → Fetcher URL → Save.'; return; }
   const btn = $('#fetchInfo');
   fetching = true; btn.disabled = true;
   try {
@@ -715,14 +716,16 @@ $('#saveSettings').addEventListener('click', () => {
   toast('Settings saved');
 });
 $('#saveFetcher').addEventListener('click', () => {
-  const u = $('#fetcherUrl').value.trim().replace(/\/+$/, '');
-  if (u && !/^https:\/\//.test(u)) return toast('Fetcher URL must start with https://');
+  let u = $('#fetcherUrl').value.trim().replace(/\/+$/, '');
+  if (u && !/^https?:\/\//i.test(u)) u = 'https://' + u;
+  $('#fetcherUrl').value = u;
   putSettings({ fetcherUrl: u, sampleSize: int($('#sampleSize').value) || 20 });
   toast('Auto-fetch saved');
 });
 $('#testFetcher').addEventListener('click', async () => {
-  const u = $('#fetcherUrl').value.trim().replace(/\/+$/, '');
+  let u = $('#fetcherUrl').value.trim().replace(/\/+$/, '');
   if (!u) return toast('Enter the Worker URL first');
+  if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
   try { const j = await fetch(u).then((r) => r.json()); toast(j.service ? 'Worker is reachable ✓' : 'Unexpected reply from that URL'); }
   catch (e) { toast('Could not reach Worker: ' + e.message); }
 });
