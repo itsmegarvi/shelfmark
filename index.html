@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Shelfmark</title>
+  <meta name="description" content="Reading tracker for web novels, light novels and AO3.">
+  <meta name="theme-color" content="#14161c" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f6f4ef" media="(prefers-color-scheme: light)">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand"><img src="icon.svg" alt="" width="26" height="26"> Shelfmark</div>
+    <div class="topbar-right">
+      <span id="syncState" class="sync-dot" title="Local only"></span>
+      <button id="accountBtn" class="ghost small">Sign in</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- LIBRARY -->
+    <section id="view-library" class="view active">
+      <div class="lib-tools">
+        <input id="search" type="search" placeholder="Search title, author, tag…" autocomplete="off">
+        <select id="sort" aria-label="Sort">
+          <option value="updated">Recently read</option>
+          <option value="title">Title</option>
+          <option value="progress">Progress</option>
+          <option value="rating">Rating</option>
+        </select>
+      </div>
+      <div id="statusChips" class="chips"></div>
+      <div id="sourceChips" class="chips subtle"></div>
+      <ul id="novelList" class="novel-list"></ul>
+      <div id="emptyLib" class="empty hidden">
+        <p>Your shelf is empty.</p>
+        <button class="primary" data-action="add">Add your first novel</button>
+      </div>
+    </section>
+
+    <!-- RECAP -->
+    <section id="view-recap" class="view">
+      <div class="chips" id="periodChips"></div>
+      <div id="customRange" class="custom-range hidden">
+        <label>From <input type="date" id="rangeFrom"></label>
+        <label>To <input type="date" id="rangeTo"></label>
+      </div>
+      <div id="recapBody"></div>
+    </section>
+
+    <!-- HISTORY -->
+    <section id="view-history" class="view">
+      <h2 class="view-title">Reading log</h2>
+      <ul id="historyList" class="history-list"></ul>
+      <button id="moreHistory" class="ghost hidden">Show more</button>
+    </section>
+
+    <!-- SETTINGS -->
+    <section id="view-settings" class="view">
+      <h2 class="view-title">Settings</h2>
+      <div class="card">
+        <h3>Account &amp; sync</h3>
+        <p id="accountInfo" class="muted"></p>
+        <div class="row gap">
+          <button id="settingsSignIn" class="primary">Sign in with Google</button>
+          <button id="settingsSignOut" class="ghost hidden">Sign out</button>
+        </div>
+        <details id="emailAuth" class="hidden" style="margin-top:12px">
+          <summary class="muted">Use email &amp; password instead</summary>
+          <label class="field" style="margin-top:10px">Email <input id="authEmail" type="email" autocomplete="username"></label>
+          <label class="field">Password <input id="authPass" type="password" autocomplete="current-password" minlength="6"></label>
+          <div class="row gap"><button id="emailSignIn" class="primary">Sign in</button><button id="emailSignUp" class="ghost">Create account</button></div>
+        </details>
+      </div>
+      <div class="card" id="setupCard">
+        <h3>Cloud sync setup</h3>
+        <p class="muted" id="setupInfo">Paste the <code>firebaseConfig</code> from your Firebase console (Project settings → Your apps → Web app). Saved on this device only.</p>
+        <textarea id="cfgInput" rows="6" placeholder='const firebaseConfig = { apiKey: "…", authDomain: "…", projectId: "…", … };'></textarea>
+        <div class="row gap wrap" style="margin-top:10px">
+          <button id="cfgSave" class="primary">Save &amp; connect</button>
+          <button id="cfgLink" class="ghost hidden">Copy setup link</button>
+          <button id="cfgClear" class="ghost danger hidden">Remove</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Defaults</h3>
+        <label class="field">Default words per chapter
+          <input type="number" id="defaultWpc" min="1" step="50">
+        </label>
+        <label class="field">Sources <span class="muted">(comma separated)</span>
+          <textarea id="sourcesInput" rows="2"></textarea>
+        </label>
+        <button id="saveSettings" class="primary">Save</button>
+      </div>
+      <div class="card">
+        <h3>Backup</h3>
+        <p class="muted">Export everything to a JSON file, or restore from one. Import merges by newest edit.</p>
+        <div class="row gap wrap">
+          <button id="exportBtn" class="ghost">Export JSON</button>
+          <label class="ghost button-like">Import JSON<input type="file" id="importFile" accept="application/json" hidden></label>
+          <button id="exportCsvBtn" class="ghost">Export CSV</button>
+        </div>
+      </div>
+      <p class="muted tiny" id="versionInfo"></p>
+    </section>
+  </main>
+
+  <button id="fab" class="fab" data-action="add" aria-label="Add novel">+</button>
+
+  <nav class="tabbar">
+    <button data-view="library" class="active"><svg viewBox="0 0 24 24"><path d="M4 4h4v16H4zM10 4h4v16h-4zM16.5 4.5l3.8 1 -3.9 14.6-3.8-1z"/></svg>Library</button>
+    <button data-view="recap"><svg viewBox="0 0 24 24"><path d="M4 20V10h3v10zM10.5 20V4h3v16zM17 20v-7h3v7z"/></svg>Recap</button>
+    <button data-view="history"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 1-9 9h2a7 7 0 1 0 2.05-4.95L9 9H3V3l2.64 2.64A8.97 8.97 0 0 1 12 3zm-1 4h2v5.2l3.6 2.1-1 1.7L11 13.4z"/></svg>Log</button>
+    <button data-view="settings"><svg viewBox="0 0 24 24"><path d="M19.4 13a7.5 7.5 0 0 0 0-2l2.1-1.6-2-3.5-2.5 1a7.6 7.6 0 0 0-1.7-1L15 3h-4l-.4 2.9a7.6 7.6 0 0 0-1.7 1l-2.5-1-2 3.5L6.6 11a7.5 7.5 0 0 0 0 2l-2.1 1.6 2 3.5 2.5-1c.5.4 1.1.7 1.7 1L11 21h4l.4-2.9c.6-.3 1.2-.6 1.7-1l2.5 1 2-3.5zM13 15.5a3.5 3.5 0 1 1 0-7 3.5 3.5 0 0 1 0 7z"/></svg>Settings</button>
+  </nav>
+
+  <!-- Novel editor -->
+  <dialog id="novelDialog" class="sheet">
+    <form id="novelForm" method="dialog">
+      <div class="sheet-head">
+        <h2 id="novelDialogTitle">Add novel</h2>
+        <button type="button" class="ghost small" data-close>Close</button>
+      </div>
+      <input type="hidden" name="id">
+      <label class="field">Link <span class="muted">(paste to auto-detect source)</span>
+        <input name="url" type="url" placeholder="https://…" inputmode="url">
+      </label>
+      <label class="field">Title*
+        <input name="title" required autocomplete="off">
+      </label>
+      <div class="grid2">
+        <label class="field">Author <input name="author" autocomplete="off"></label>
+        <label class="field">Source <select name="source"></select></label>
+      </div>
+      <div class="grid2">
+        <label class="field">Status
+          <select name="status">
+            <option value="reading">Reading</option>
+            <option value="planned">Plan to read</option>
+            <option value="completed">Completed</option>
+            <option value="onhold">On hold</option>
+            <option value="dropped">Dropped</option>
+          </select>
+        </label>
+        <label class="field">Rating
+          <select name="rating">
+            <option value="0">—</option><option value="1">★</option><option value="2">★★</option>
+            <option value="3">★★★</option><option value="4">★★★★</option><option value="5">★★★★★</option>
+          </select>
+        </label>
+      </div>
+      <div class="grid2">
+        <label class="field">Chapters read <input name="chaptersRead" type="number" min="0" step="1" inputmode="numeric"></label>
+        <label class="field">Total chapters <input name="totalChapters" type="number" min="0" step="1" inputmode="numeric" placeholder="ongoing"></label>
+      </div>
+      <div class="grid2">
+        <label class="field">Words / chapter <input name="wpc" type="number" min="1" step="1" inputmode="numeric"></label>
+        <label class="field">Total words <span class="muted">(AO3)</span> <input name="totalWords" type="number" min="0" step="1" inputmode="numeric" placeholder="optional"></label>
+      </div>
+      <p class="hint" id="wpcHint"></p>
+      <label class="field">Tags <span class="muted">(comma separated)</span> <input name="tags" autocomplete="off" placeholder="cultivation, system, romance"></label>
+      <label class="field">Notes <textarea name="notes" rows="3"></textarea></label>
+      <p class="hint" id="backfillHint"></p>
+      <div class="sheet-actions">
+        <button type="button" id="deleteNovel" class="danger ghost hidden">Delete</button>
+        <span class="spacer"></span>
+        <button type="submit" class="primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Log chapters -->
+  <dialog id="logDialog" class="sheet">
+    <form id="logForm" method="dialog">
+      <div class="sheet-head">
+        <h2 id="logDialogTitle">Log reading</h2>
+        <button type="button" class="ghost small" data-close>Close</button>
+      </div>
+      <input type="hidden" name="novelId">
+      <div class="stepper">
+        <button type="button" data-step="-1">−</button>
+        <input name="chapters" type="number" step="1" value="1" inputmode="numeric" aria-label="Chapters">
+        <button type="button" data-step="1">+</button>
+      </div>
+      <div class="quick-steps">
+        <button type="button" data-set="5">5</button><button type="button" data-set="10">10</button>
+        <button type="button" data-set="25">25</button><button type="button" data-set="50">50</button>
+      </div>
+      <label class="field">…or I'm now on chapter <input name="upTo" type="number" min="0" step="1" inputmode="numeric"></label>
+      <label class="field">Date <input name="date" type="date"></label>
+      <p class="hint" id="logHint"></p>
+      <div class="sheet-actions">
+        <span class="spacer"></span>
+        <button type="submit" class="primary">Log</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script type="module" src="app.js"></script>
+</body>
+</html>
