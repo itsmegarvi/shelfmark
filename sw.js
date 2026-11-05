@@ -1,5 +1,5 @@
 // Bump CACHE when you change any app file so installed copies update.
-const CACHE = 'shelfmark-v1.1.0';
+const CACHE = 'shelfmark-v1.2.0';
 const SHELL = ['./', 'index.html', 'styles.css', 'app.js', 'firebase-config.js', 'manifest.webmanifest', 'icon.svg', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => {

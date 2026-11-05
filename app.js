@@ -23,15 +23,16 @@ function loadConfig() {
 }
 const firebaseConfig = loadConfig();
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const LS_KEY = 'shelfmark:v1';
 const FIREBASE_V = '10.12.2';
-const DEFAULT_SOURCES = ['AsuraNovels', 'WebNovel', 'LightWebNovelReads', 'AO3', 'Royal Road', 'ScribbleHub', 'Other'];
+const DEFAULT_SOURCES = ['AsuraNovels', 'WebNovel', 'LightWebNovelReads', 'NovelCodex', 'AO3', 'Royal Road', 'ScribbleHub', 'Other'];
 const SOURCE_HINTS = [
   [/asura/i, 'AsuraNovels'],
   [/webnovel\.com/i, 'WebNovel'],
   [/lightwebnovel|lightnovel|novelreads/i, 'LightWebNovelReads'],
   [/archiveofourown|(^|\.)ao3\./i, 'AO3'],
+  [/novelcodex/i, 'NovelCodex'],
   [/royalroad/i, 'Royal Road'],
   [/scribblehub/i, 'ScribbleHub'],
 ];
@@ -65,7 +66,8 @@ function load() {
   try {
     const s = JSON.parse(localStorage.getItem(LS_KEY));
     if (s && s.novels && s.logs) {
-      s.settings = { defaultWpc: 2000, sources: DEFAULT_SOURCES, updatedAt: 0, ...(s.settings || {}) };
+      s.settings = { defaultWpc: 2000, sources: DEFAULT_SOURCES, updatedAt: 0, fetcherUrl: '', sampleSize: 20, ...(s.settings || {}) };
+      if (!s.settings.sources.includes('NovelCodex')) s.settings.sources = [...s.settings.sources.filter((x) => x !== 'Other'), 'NovelCodex', 'Other'];
       return s;
     }
   } catch {}
@@ -218,6 +220,8 @@ function novelCard(n) {
   const words = (n.chaptersRead || 0) * wpcOf(n);
   return `<li class="novel" data-id="${n.id}">
     <div class="novel-main" data-edit="${n.id}">
+      ${n.cover ? `<img class="cover" src="${esc(n.cover)}" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">` : ''}
+      <div class="nm-text">
       <h3 class="novel-title">${esc(n.title)}</h3>
       <div class="novel-meta">
         ${n.source ? `<span class="badge">${esc(n.source)}</span>` : ''}
@@ -225,6 +229,8 @@ function novelCard(n) {
         ${n.author ? `<span>${esc(n.author)}</span>` : ''}
         ${stars ? `<span>${stars}</span>` : ''}
         ${n.url ? `<a class="link-out" href="${esc(n.url)}" target="_blank" rel="noopener" data-stop>Open ↗</a>` : ''}
+      </div>
+      ${n.pubStatus || n.wpcNote ? `<div class="pub">${[n.pubStatus && n.pubStatus[0].toUpperCase() + n.pubStatus.slice(1), n.wpcNote && '~' + num(n.wpc) + ' w/ch (' + n.wpcNote + ')'].filter(Boolean).map(esc).join(' · ')}</div>` : ''}
       </div>
     </div>
     <div class="novel-actions">
@@ -278,6 +284,11 @@ function openNovel(id) {
   nf_.totalWords.value = n?.totalWords ?? '';
   nf_.tags.value = (n?.tags || []).join(', ');
   nf_.notes.value = n?.notes || '';
+  nf_.cover.value = n?.cover || '';
+  fetched = { pubStatus: n?.pubStatus || null, wpcNote: n?.wpcNote || null };
+  $('#fetchStatus').textContent = '';
+  showCover();
+  updateFetchBtn();
   updateNovelHints();
   nd.showModal();
   if (!n) nf_.url.focus();
@@ -293,6 +304,73 @@ function updateNovelHints() {
 nf_.url.addEventListener('input', () => {
   const s = detectSource(nf_.url.value);
   if (s) nf_.source.value = s;
+  updateFetchBtn();
+});
+nf_.wpc.addEventListener('input', () => { fetched.wpcNote = null; });
+
+/* ---------------- Auto-fetch (Cloudflare Worker) ---------------- */
+let fetched = { pubStatus: null, wpcNote: null };
+let fetching = false;
+const fetcher = () => (state.settings.fetcherUrl || '').replace(/\/+$/, '');
+function updateFetchBtn() {
+  $('#fetchInfo').classList.toggle('hidden', !fetcher() || !/^https?:\/\//.test(nf_.url.value.trim()));
+}
+function showCover() {
+  const img = $('#coverPreview');
+  img.classList.toggle('hidden', !nf_.cover.value);
+  if (nf_.cover.value) img.src = nf_.cover.value; else img.removeAttribute('src');
+}
+async function fetchJson(path) {
+  const r = await fetch(fetcher() + path);
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok || j.error) throw new Error(j.error || 'HTTP ' + r.status);
+  return j;
+}
+$('#fetchInfo').addEventListener('click', async () => {
+  if (fetching) return;
+  const url = nf_.url.value.trim();
+  const st = $('#fetchStatus');
+  const btn = $('#fetchInfo');
+  fetching = true; btn.disabled = true;
+  try {
+    st.textContent = 'Reading novel page…';
+    const m = await fetchJson('/meta?url=' + encodeURIComponent(url));
+    if (m.title && !nf_.title.value.trim()) nf_.title.value = m.title;
+    if (m.author && !nf_.author.value.trim()) nf_.author.value = m.author;
+    if (m.cover) { nf_.cover.value = m.cover; showCover(); }
+    if (m.totalChapters) nf_.totalChapters.value = m.totalChapters;
+    if (m.genres?.length) {
+      const cur = nf_.tags.value.split(',').map((t) => t.trim()).filter(Boolean);
+      nf_.tags.value = [...new Set([...cur, ...m.genres.map((g) => g.toLowerCase())])].join(', ');
+    }
+    fetched.pubStatus = m.status || null;
+    if (m.avgWords) {
+      nf_.wpc.value = m.avgWords;
+      if (m.totalWords) nf_.totalWords.value = m.totalWords;
+      fetched.wpcNote = `exact, ${m.publishedChapters} ch`;
+      st.textContent = `Done · ${num(m.totalWords)} words over ${m.publishedChapters} chapters.`;
+    } else if (m.chapterUrls?.length) {
+      const urls = m.chapterUrls.slice(0, int(state.settings.sampleSize) || 20);
+      const counts = [];
+      for (let i = 0; i < urls.length; i += 5) {
+        st.textContent = `Counting words · chapter ${i + 1}–${Math.min(i + 5, urls.length)} of ${urls.length}…`;
+        const q = urls.slice(i, i + 5).map((u) => 'u=' + encodeURIComponent(u)).join('&');
+        const res = await fetchJson('/words?' + q);
+        counts.push(...res.counts.filter((c) => c > 100));
+      }
+      if (counts.length) {
+        const avg = Math.round(counts.reduce((a, b) => a + b, 0) / counts.length);
+        nf_.wpc.value = avg;
+        fetched.wpcNote = `avg of ${counts.length} ch`;
+        st.textContent = `Done · ~${num(avg)} words/chapter (average of first ${counts.length} chapters).`;
+      } else st.textContent = 'Got details, but couldn\'t count words on this site — set words/chapter yourself.';
+    } else {
+      st.textContent = 'Got details. ' + (m.note || 'This site doesn\'t expose chapters, so words/chapter stays as is.');
+    }
+    updateNovelHints();
+  } catch (e) {
+    st.textContent = 'Fetch failed: ' + e.message;
+  } finally { fetching = false; btn.disabled = false; }
 });
 ['totalWords', 'totalChapters'].forEach((k) => nf_[k].addEventListener('input', () => {
   const tw = int(nf_.totalWords.value), tc = int(nf_.totalChapters.value);
@@ -319,6 +397,9 @@ nf_.addEventListener('submit', (e) => {
     totalWords: int(nf_.totalWords.value) || null,
     tags: nf_.tags.value.split(',').map((t) => t.trim()).filter(Boolean),
     notes: nf_.notes.value.trim(),
+    cover: nf_.cover.value || null,
+    pubStatus: fetched.pubStatus || null,
+    wpcNote: fetched.wpcNote || null,
   };
   const targetRead = Math.max(0, int(nf_.chaptersRead.value) || 0);
   const today = dayStr();
@@ -581,6 +662,8 @@ $('#historyList').addEventListener('click', (e) => {
 function renderSettings() {
   $('#defaultWpc').value = state.settings.defaultWpc;
   $('#sourcesInput').value = state.settings.sources.join(', ');
+  $('#fetcherUrl').value = state.settings.fetcherUrl || '';
+  $('#sampleSize').value = String(state.settings.sampleSize || 20);
   $('#versionInfo').textContent = `Shelfmark v${VERSION} · ${novels().length} novels · ${logs().length} log entries`;
   const signedIn = !!fb?.user;
   $('#accountInfo').textContent = !firebaseConfig?.apiKey
@@ -630,6 +713,18 @@ $('#saveSettings').addEventListener('click', () => {
   const sources = [...new Set($('#sourcesInput').value.split(',').map((s) => s.trim()).filter(Boolean))];
   putSettings({ defaultWpc: int($('#defaultWpc').value) || 2000, sources: sources.length ? sources : DEFAULT_SOURCES });
   toast('Settings saved');
+});
+$('#saveFetcher').addEventListener('click', () => {
+  const u = $('#fetcherUrl').value.trim().replace(/\/+$/, '');
+  if (u && !/^https:\/\//.test(u)) return toast('Fetcher URL must start with https://');
+  putSettings({ fetcherUrl: u, sampleSize: int($('#sampleSize').value) || 20 });
+  toast('Auto-fetch saved');
+});
+$('#testFetcher').addEventListener('click', async () => {
+  const u = $('#fetcherUrl').value.trim().replace(/\/+$/, '');
+  if (!u) return toast('Enter the Worker URL first');
+  try { const j = await fetch(u).then((r) => r.json()); toast(j.service ? 'Worker is reachable ✓' : 'Unexpected reply from that URL'); }
+  catch (e) { toast('Could not reach Worker: ' + e.message); }
 });
 $('#exportBtn').addEventListener('click', () => {
   const data = { app: 'shelfmark', version: VERSION, exportedAt: new Date().toISOString(), settings: state.settings, novels: Object.values(state.novels), logs: Object.values(state.logs) };

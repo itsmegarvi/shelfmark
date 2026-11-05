@@ -49,3 +49,30 @@ Use console.firebase.google.com in Chrome. Desktop site mode helps here too.
 - If Google sign-in fails inside the installed app, sign in once in a normal Chrome tab, or use Email/Password.
 - **Updating the app later:** upload the changed files to the repo, then change `CACHE` in `sw.js` (e.g. `v1.1.1`).
 - **Backup:** Settings has Export JSON and Export CSV.
+
+## Auto-fetch: cover, chapters and word count (optional, free)
+A small Cloudflare Worker (`worker.js` in this repo) reads a novel's page and returns:
+
+- the cover, title, author, genres, total chapters and status
+- an average words-per-chapter, worked out by counting the first 10–30 chapters (you set how many)
+
+Chapter text is never saved.
+
+Supported sites:
+
+- **Asura**: everything, including the word average
+- **NovelCodex**: cover and details only. It's a tracker site with no chapter text to count.
+- **AO3**: exact word count
+
+### Set it up from your phone (about 5 min)
+1. Go to dash.cloudflare.com and sign up for free.
+2. Open **Compute (Workers)** → **Create** → **Start with Hello World**. Name it `shelfmark-fetch` and tap **Deploy**.
+3. Tap **Edit code** and delete everything in the editor.
+4. Open `worker.js` in this repo, tap **Raw**, select all and copy. Paste it into the editor and tap **Deploy**.
+5. Copy the Worker URL, e.g. `https://shelfmark-fetch.<you>.workers.dev`.
+6. In Shelfmark, go to **Settings → Auto-fetch**, paste the URL and tap **Save**, then **Test**.
+7. Add a novel: paste its link, tap **⤓ Fetch info**, then **Save**.
+
+If you host Shelfmark somewhere other than `itsmegarvi.github.io`, add that address to `ALLOWED_ORIGINS` at the top of `worker.js`.
+To support another site, add it to `ALLOWED_HOSTS`. Generic chapter links (`.../chapter-12`) work on many sites.
+The free plan allows 100,000 requests a day. Sampling 20 chapters uses 5 requests.

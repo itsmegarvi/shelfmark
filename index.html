@@ -99,6 +99,15 @@
         <button id="saveSettings" class="primary">Save</button>
       </div>
       <div class="card">
+        <h3>Auto-fetch (cover, chapters, word count)</h3>
+        <p class="muted">URL of your Cloudflare Worker running <code>worker.js</code> from the repo. See README → Auto-fetch.</p>
+        <label class="field">Fetcher URL <input id="fetcherUrl" type="url" placeholder="https://shelfmark-fetch.yourname.workers.dev" inputmode="url"></label>
+        <label class="field">Chapters to sample for the word average
+          <select id="sampleSize"><option>10</option><option>15</option><option selected>20</option><option>30</option></select>
+        </label>
+        <div class="row gap"><button id="saveFetcher" class="primary">Save</button><button id="testFetcher" class="ghost">Test</button></div>
+      </div>
+      <div class="card">
         <h3>Backup</h3>
         <p class="muted">Export everything to a JSON file, or restore from one. Import merges by newest edit.</p>
         <div class="row gap wrap">
@@ -128,9 +137,17 @@
         <button type="button" class="ghost small" data-close>Close</button>
       </div>
       <input type="hidden" name="id">
-      <label class="field">Link <span class="muted">(paste to auto-detect source)</span>
-        <input name="url" type="url" placeholder="https://…" inputmode="url">
-      </label>
+      <div class="cover-row">
+        <img id="coverPreview" class="cover big hidden" alt="" referrerpolicy="no-referrer">
+        <div class="cover-fields">
+          <label class="field">Link <span class="muted">(paste to auto-detect source)</span>
+            <input name="url" type="url" placeholder="https://…" inputmode="url">
+          </label>
+          <button type="button" id="fetchInfo" class="ghost small hidden">⤓ Fetch info</button>
+          <p class="hint" id="fetchStatus"></p>
+        </div>
+      </div>
+      <input type="hidden" name="cover">
       <label class="field">Title*
         <input name="title" required autocomplete="off">
       </label>
