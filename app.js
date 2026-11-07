@@ -9,21 +9,25 @@ function parseConfig(text) {
   for (const m of text.matchAll(/["']?(\w+)["']?\s*:\s*["']([^"']+)["']/g)) out[m[1]] = m[2];
   return out.apiKey && out.projectId ? out : null;
 }
+/* Setup link: #setup=<base64 config>&fetcher=<worker url>. Either part is optional. */
+let pendingFetcher = null;
 function loadConfig() {
-  if (fileConfig?.apiKey) return fileConfig;
   const m = location.hash.match(/setup=([^&]+)/);
-  if (m) {
+  const f = location.hash.match(/fetcher=([^&]+)/);
+  if (f) { try { pendingFetcher = decodeURIComponent(f[1]); } catch {} }
+  if (m && !fileConfig?.apiKey) {
     try {
       const c = JSON.parse(decodeURIComponent(escape(atob(decodeURIComponent(m[1])))));
       if (c.apiKey) localStorage.setItem(CFG_KEY, JSON.stringify(c));
     } catch {}
-    history.replaceState(null, '', location.pathname + location.search);
   }
+  if (m || f) history.replaceState(null, '', location.pathname + location.search);
+  if (fileConfig?.apiKey) return fileConfig;
   try { return JSON.parse(localStorage.getItem(CFG_KEY)) || null; } catch { return null; }
 }
 const firebaseConfig = loadConfig();
 
-const VERSION = '1.5.0';
+const VERSION = '1.5.1';
 const LS_KEY = 'shelfmark:v1';
 const FIREBASE_V = '10.12.2';
 const DEFAULT_SOURCES = ['AsuraNovels', 'WebNovel', 'LightWebNovelReads', 'NovelCodex', 'WuxiaWorld', 'AO3', 'Royal Road', 'ScribbleHub', 'Other'];
@@ -773,7 +777,8 @@ $('#cfgSave').addEventListener('click', () => {
   location.reload();
 });
 $('#cfgLink').addEventListener('click', async () => {
-  const link = location.origin + location.pathname + '#setup=' + encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(firebaseConfig)))));
+  let link = location.origin + location.pathname + '#setup=' + encodeURIComponent(btoa(unescape(encodeURIComponent(JSON.stringify(firebaseConfig)))));
+  if (fetcher()) link += '&fetcher=' + encodeURIComponent(fetcher());
   try { await navigator.clipboard.writeText(link); toast('Setup link copied — open it on your other device'); } catch { prompt('Copy this link', link); }
 });
 $('#cfgClear').addEventListener('click', async () => {
@@ -969,6 +974,11 @@ function render() {
 }
 window.addEventListener('storage', (e) => { if (e.key === LS_KEY) { state = load(); render(); } });
 
+if (pendingFetcher) {
+  let u = pendingFetcher.trim().replace(/\/+$/, '');
+  if (u && !/^https?:\/\//i.test(u)) u = 'https://' + u;
+  if (/^https:\/\//i.test(u)) { state.settings = { ...state.settings, fetcherUrl: u, updatedAt: Date.now() }; persist(); setTimeout(() => toast('Auto-fetch set up from link'), 600); }
+}
 if (!novels().some((n) => n.status === 'reading')) lib.status = 'all';
 renderAccount();
 render();
