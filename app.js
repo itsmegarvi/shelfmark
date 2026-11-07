@@ -23,7 +23,7 @@ function loadConfig() {
 }
 const firebaseConfig = loadConfig();
 
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 const LS_KEY = 'shelfmark:v1';
 const FIREBASE_V = '10.12.2';
 const DEFAULT_SOURCES = ['AsuraNovels', 'WebNovel', 'LightWebNovelReads', 'NovelCodex', 'WuxiaWorld', 'AO3', 'Royal Road', 'ScribbleHub', 'Other'];
@@ -252,8 +252,10 @@ function novelCard(n) {
       </div>
     </div>
     <div class="novel-actions">
-      <button class="plus alt" data-log="${n.id}" aria-label="Log chapters">Log</button>
-      <button class="plus" data-plus="${n.id}" aria-label="Plus one chapter">+1</button>
+      <div class="split">
+        <button class="plus main" data-plus="${n.id}" aria-label="Plus one chapter">+1</button>
+        <button class="plus caret" data-more="${n.id}" aria-label="Log several chapters" aria-haspopup="menu">▾</button>
+      </div>
     </div>
     <div class="progress">
       <div class="track ${total ? '' : 'unknown'}"><i style="width:${p}%"></i></div>
@@ -270,11 +272,49 @@ $('#novelList').addEventListener('click', (e) => {
     toast(`+1 chapter · ${state.novels[plus.dataset.plus].title}`, { label: 'Undo', fn: () => undoLog(res) });
     return;
   }
+  const more = e.target.closest('[data-more]');
+  if (more) return openQuickMenu(more.dataset.more, more);
   const log = e.target.closest('[data-log]');
   if (log) return openLog(log.dataset.log);
   const ed = e.target.closest('[data-edit]');
   if (ed) openNovel(ed.dataset.edit);
 });
+
+/* ---------------- Quick-add menu (+N) ---------------- */
+const QUICK = [2, 3, 5, 10, 15, 20, 25, 50];
+const qm = document.createElement('div');
+qm.className = 'quick-menu hidden';
+qm.setAttribute('role', 'menu');
+document.body.appendChild(qm);
+function closeQuickMenu() { qm.classList.add('hidden'); qm.dataset.id = ''; }
+function openQuickMenu(id, anchor) {
+  if (qm.dataset.id === id && !qm.classList.contains('hidden')) return closeQuickMenu();
+  const n = state.novels[id];
+  const left = n.totalChapters ? n.totalChapters - (n.chaptersRead || 0) : Infinity;
+  qm.dataset.id = id;
+  qm.innerHTML = `<div class="qm-title">Chapters read</div>
+    <div class="qm-grid">${QUICK.map((q) => `<button role="menuitem" data-q="${q}" ${q > left ? 'disabled' : ''}>+${q}</button>`).join('')}</div>
+    <button class="qm-custom" role="menuitem" data-q="custom">Custom / up to chapter… / other date</button>`;
+  qm.classList.remove('hidden');
+  const r = anchor.getBoundingClientRect();
+  const w = qm.offsetWidth, h = qm.offsetHeight;
+  qm.style.left = Math.max(8, Math.min(window.innerWidth - w - 8, r.right - w)) + 'px';
+  const below = r.bottom + 6 + h < window.innerHeight - 80;
+  qm.style.top = (below ? r.bottom + 6 : r.top - h - 6) + window.scrollY + 'px';
+}
+qm.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-q]');
+  if (!b || b.disabled) return;
+  const id = qm.dataset.id;
+  closeQuickMenu();
+  if (b.dataset.q === 'custom') return openLog(id);
+  const res = logChapters(id, int(b.dataset.q));
+  if (!res) return toast('Already on the last chapter — update total chapters if more are out');
+  toast(`+${res.log.chapters} chapters · ${state.novels[id].title}`, { label: 'Undo', fn: () => undoLog(res) });
+});
+document.addEventListener('click', (e) => { if (!e.target.closest('.quick-menu, [data-more]')) closeQuickMenu(); });
+window.addEventListener('scroll', closeQuickMenu, { passive: true });
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeQuickMenu(); });
 
 /* ---------------- Novel dialog ---------------- */
 const nd = $('#novelDialog');

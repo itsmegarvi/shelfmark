@@ -249,3 +249,14 @@ dialog form { padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
 .swatches { display: flex; flex-wrap: wrap; gap: 10px; }
 .swatch { width: 38px; height: 38px; border-radius: 50%; background: var(--sw); border: 3px solid transparent; outline: 2px solid transparent; }
 .swatch.active { border-color: var(--surface); outline-color: var(--sw); }
+
+/* +1 split button and quick-add menu */
+.split { display: flex; }
+.plus.main { border-radius: 10px 0 0 10px; }
+.plus.caret { min-width: 30px; padding: 0; border-radius: 0 10px 10px 0; border-left: 1px solid color-mix(in srgb, var(--accent-ink) 25%, transparent); font-size: 13px; }
+.quick-menu { position: absolute; z-index: 40; width: 236px; padding: 10px; border-radius: 14px; background: var(--surface); border: 1px solid var(--line); box-shadow: 0 10px 30px rgba(0,0,0,.35); }
+.qm-title { font-size: 12px; color: var(--muted); font-weight: 600; margin: 0 2px 8px; }
+.qm-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.qm-grid button { padding: 9px 0; border-radius: 9px; background: var(--accent-soft); color: var(--accent); font-weight: 700; font-variant-numeric: tabular-nums; }
+.qm-grid button:disabled { opacity: .35; }
+.qm-custom { width: 100%; margin-top: 8px; padding: 9px; border-radius: 9px; background: var(--surface-2); font-size: 13px; font-weight: 600; }
