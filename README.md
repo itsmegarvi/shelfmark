@@ -1,4 +1,19 @@
-# Shelfmark: phone-only setup (Android)
+# Shelfmark
+
+A Goodreads-style tracker for web novels, light novels and AO3. Log chapters, get word estimates, and see recaps of what you read. It's a PWA: install it on Android, use it offline, and sync across devices with Google sign-in.
+
+## What it does (v1.5.0)
+- **Library:** novels with a cover, source, status, rating, tags and notes. Search, sort, and filter by status or source.
+- **Logging:** tap **+1** after a chapter. Tap **▾** next to it to log 2, 3, 5, 10, 15, 20, 25 or 50 at once, or **Custom / up to chapter… / other date** for anything else. Every log can be undone from the toast.
+- **Word estimates:** chapters × average words per chapter. AO3 uses the exact total word count.
+- **Recap:** chapters, words, reading days, streaks, top novels and sources for any period (week, month, year, all time, or custom).
+- **Auto-fetch (optional):** paste a novel link and tap **⤓ Fetch info** to fill in the cover, title, author, genres, chapter count and a word average. See *Auto-fetch* below.
+- **Any site:** AsuraNovels, WebNovel, LightWebNovelReads, NovelCodex, WuxiaWorld, AO3, Royal Road and ScribbleHub are built in. Paste a link from any other site and its domain is added to your sources. You can also edit the list in **Settings → Defaults → Sources**.
+- **Look:** dark and light follow your phone. Status chips are coloured (Reading blue, Plan purple, Completed green, On hold yellow, Dropped red). Pick an accent in **Settings → Theme colour**.
+- **Sync:** sign in with Google or email to keep phone and laptop in sync. Without sign-in, everything stays on the device.
+- **Backup:** Export JSON or CSV, and Import JSON (merges by newest edit).
+
+# Phone-only setup (Android)
 
 You need about 15 minutes, Chrome on Android, a GitHub account and a Google account. You don't need a laptop.
 
@@ -6,8 +21,8 @@ You need about 15 minutes, Chrome on Android, a GitHub account and a Google acco
 1. Download `webnovel-tracker.zip`. In the **Files** app, tap it, then tap **Extract**.
 2. In Chrome, go to github.com and sign in. Tap ⋮ and check **Desktop site**, because the upload button only shows in desktop mode.
 3. Tap **+**, then **New repository**. Name it `shelfmark`, make it **Public**, and tick **Add a README**. Create it.
-4. Tap **Add file**, then **Upload files**, then **choose your files**. Select all 11 files from the extracted folder:
-   `index.html app.js styles.css firebase-config.js sw.js manifest.webmanifest icon.svg icon-192.png icon-512.png firestore.rules README.md`
+4. Tap **Add file**, then **Upload files**, then **choose your files**. Select every file from the extracted folder:
+   `index.html app.js styles.css firebase-config.js sw.js manifest.webmanifest icon.svg icon-192.png icon-512.png firestore.rules worker.js README.md .nojekyll`
    Then tap **Commit changes**.
 5. Open repo **Settings**, then **Pages**. Set Source to **Deploy from a branch**, set Branch to `main` with folder `/ (root)`, and tap **Save**.
 6. Wait about a minute. Your app is at `https://<your-github-username>.github.io/shelfmark/`.
@@ -33,8 +48,10 @@ Use console.firebase.google.com in Chrome. Desktop site mode helps here too.
      }
    }
    ```
-4. Tap the ⚙ icon and open **Project settings**. Under **Your apps**, tap the **</>** (Web) icon, enter the nickname `shelfmark`, and register. Skip Firebase Hosting.
+   Use **Firestore Database**, not **Realtime Database**. The Realtime Database rules editor takes JSON and will show a parse error for these rules.
+4. Tap the ⚙ icon and open **Project settings**, then the **General** tab. Under **Your apps**, tap the **</>** (Web) icon, enter the nickname `shelfmark`, and register. Skip Firebase Hosting.
    Copy the whole `const firebaseConfig = { … }` block.
+   Don't use **Service accounts** or **Generate new private key**. That key is a real secret and the app doesn't need it.
 
 ## 3. Connect the app
 1. Open `https://<your-github-username>.github.io/shelfmark/` and tap **Set up sync** at the top right.
@@ -44,10 +61,17 @@ Use console.firebase.google.com in Chrome. Desktop site mode helps here too.
 
 **Another device:** go to Settings and tap **Copy setup link**, then open that link on the other device and sign in. You don't need to paste the config again.
 
+**Skip the paste step entirely (optional):** put your config into `firebase-config.js` in the repo:
+```js
+export const firebaseConfig = { apiKey: "…", authDomain: "…", projectId: "…", storageBucket: "…", messagingSenderId: "…", appId: "…" };
+```
+Every device that opens the site then goes straight to **Sign in with Google**.
+
 ## Notes
 - The Firebase `apiKey` isn't a secret. The Firestore rules are what keep your data private to your account.
 - If Google sign-in fails inside the installed app, sign in once in a normal Chrome tab, or use Email/Password.
-- **Updating the app later:** upload the changed files to the repo, then change `CACHE` in `sw.js` (e.g. `v1.1.1`).
+- **Updating the app later:** upload the changed files to the repo. Bump `VERSION` in `app.js` and `CACHE` in `sw.js` (e.g. `1.5.1`) so phones pick up the change. Then close and reopen the installed app once or twice. **Settings** shows the running version at the bottom.
+- **Deploy stuck?** If **Actions** shows a failed *pages build and deployment* run that says another deployment is in progress, open **Settings → Pages**, unpublish the site, and set Source back to `main` / `/ (root)`. Then commit any small change, such as editing `.nojekyll`, to trigger a fresh deploy.
 - **Backup:** Settings has Export JSON and Export CSV.
 
 ## Auto-fetch: cover, chapters and word count (optional, free)
@@ -77,3 +101,10 @@ If you host Shelfmark somewhere other than `itsmegarvi.github.io`, add that addr
 The Worker only ever returns details and word counts, never chapter text, so leaving it open to any site is safe. To keep a site out, add it to `BLOCKED_HOSTS`.
 **Updating the Worker:** open it in Cloudflare → **Edit code**, select all, paste the new `worker.js`, then **Deploy**.
 The free plan allows 100,000 requests a day. Sampling 20 chapters uses 5 requests.
+
+## Changelog
+- **1.5.0:** a **▾** next to **+1** logs several chapters at once.
+- **1.4.0:** works with any site, WuxiaWorld support, and new sources are added automatically.
+- **1.3.0:** coloured status chips and links, plus a theme colour picker.
+- **1.2.x:** auto-fetch with covers, and the setup link for new devices.
+- **1.0:** library, logging, recap, history, Firebase sync and backup.
