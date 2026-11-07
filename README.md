@@ -17,15 +17,13 @@ A Goodreads-style tracker for web novels, light novels and AO3. Log chapters, ge
 
 You need about 15 minutes, Chrome on Android, a GitHub account and a Google account. You don't need a laptop.
 
-## 1. Put the files on GitHub Pages (hosting)
-1. Download `webnovel-tracker.zip`. In the **Files** app, tap it, then tap **Extract**.
-2. In Chrome, go to github.com and sign in. Tap ⋮ and check **Desktop site**, because the upload button only shows in desktop mode.
-3. Tap **+**, then **New repository**. Name it `shelfmark`, make it **Public**, and tick **Add a README**. Create it.
-4. Tap **Add file**, then **Upload files**, then **choose your files**. Select every file from the extracted folder:
-   `index.html app.js styles.css firebase-config.js sw.js manifest.webmanifest icon.svg icon-192.png icon-512.png firestore.rules worker.js README.md .nojekyll`
-   Then tap **Commit changes**.
-5. Open repo **Settings**, then **Pages**. Set Source to **Deploy from a branch**, set Branch to `main` with folder `/ (root)`, and tap **Save**.
-6. Wait about a minute. Your app is at `https://<your-github-username>.github.io/shelfmark/`.
+## 1. Fork the repo and turn on GitHub Pages (hosting)
+1. In Chrome, sign in to github.com. Tap ⋮ and check **Desktop site**.
+2. Open **github.com/itsmegarvi/shelfmark** and tap **Fork**, then **Create fork**. You now have your own copy at `github.com/<your-username>/shelfmark`.
+3. In your fork, go to **Settings → Pages**. Set Source to **Deploy from a branch**, set Branch to `main` with folder `/ (root)`, and tap **Save**.
+4. Wait about a minute. Your app is at `https://<your-username>.github.io/shelfmark/`.
+
+To get new versions later, open your fork and tap **Sync fork → Update branch**.
 
 The app already works now, saving to your phone only. To sign in and sync, continue with the steps below.
 
@@ -70,7 +68,7 @@ Every device that opens the site then goes straight to **Sign in with Google**.
 ## Notes
 - The Firebase `apiKey` isn't a secret. The Firestore rules are what keep your data private to your account.
 - If Google sign-in fails inside the installed app, sign in once in a normal Chrome tab, or use Email/Password.
-- **Updating the app later:** upload the changed files to the repo. Bump `VERSION` in `app.js` and `CACHE` in `sw.js` (e.g. `1.5.1`) so phones pick up the change. Then close and reopen the installed app once or twice. **Settings** shows the running version at the bottom.
+- **Updating the app later:** on a fork, tap **Sync fork → Update branch**. Otherwise, upload the changed files to the repo. Bump `VERSION` in `app.js` and `CACHE` in `sw.js` (e.g. `1.5.1`) so phones pick up the change. Then close and reopen the installed app once or twice. **Settings** shows the running version at the bottom.
 - **Deploy stuck?** If **Actions** shows a failed *pages build and deployment* run that says another deployment is in progress, open **Settings → Pages**, unpublish the site, and set Source back to `main` / `/ (root)`. Then commit any small change, such as editing `.nojekyll`, to trigger a fresh deploy.
 - **Backup:** Settings has Export JSON and Export CSV.
 
@@ -97,7 +95,7 @@ It works with **any novel site**: paste a link and tap **⤓ Fetch info**.
 6. In Shelfmark, go to **Settings → Auto-fetch**, paste the URL and tap **Save**, then **Test**.
 7. Add a novel: paste its link, tap **⤓ Fetch info**, then **Save**.
 
-If you host Shelfmark somewhere other than `itsmegarvi.github.io`, add that address to `ALLOWED_ORIGINS` at the top of `worker.js`.
+**If you forked the repo:** after pasting `worker.js` into the Cloudflare editor (step 4), and before tapping **Deploy**, add your own site to `ALLOWED_ORIGINS` on line 16, e.g. `'https://<your-username>.github.io'`. Otherwise the Worker will refuse requests from your app.
 The Worker only ever returns details and word counts, never chapter text, so leaving it open to any site is safe. To keep a site out, add it to `BLOCKED_HOSTS`.
 **Updating the Worker:** open it in Cloudflare → **Edit code**, select all, paste the new `worker.js`, then **Deploy**.
 The free plan allows 100,000 requests a day. Sampling 20 chapters uses 5 requests.
